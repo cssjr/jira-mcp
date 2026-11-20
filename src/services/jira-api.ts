@@ -1,6 +1,7 @@
 import {
   AddCommentResponse,
   AdfDoc,
+  AdfNode,
   CleanComment,
   CleanJiraIssue,
   JiraCommentResponse,
@@ -241,7 +242,19 @@ export class JiraApiService {
       await this.handleFetchError(response, url);
     }
 
-    return response.json();
+    // Jira answers successful updates (PUT) and transitions (POST) with
+    // 204 No Content. Parsing the empty body crashes with
+    // "Unexpected end of JSON input", so return an empty object instead.
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    const text = await response.text();
+    if (!text) {
+      return {} as T;
+    }
+
+    return JSON.parse(text) as T;
   }
 
   async searchIssues(searchString: string): Promise<SearchIssuesResponse> {
@@ -394,7 +407,9 @@ export class JiraApiService {
         issuetype: {
           name: issueType,
         },
-        ...(description && { description }),
+        // Jira Cloud REST v3 requires the description as an ADF document,
+        // not a plain string.
+        ...(description && { description: this.createAdfFromBody(description) }),
         ...fields,
       },
     };
@@ -409,9 +424,21 @@ export class JiraApiService {
     issueKey: string,
     fields: Record<string, any>
   ): Promise<void> {
+    // Accept a plain-string description and convert it to the ADF document
+    // the v3 API requires, so callers can update descriptions like comments.
+    const normalizedFields = { ...fields };
+    if (
+      typeof normalizedFields.description === "string" &&
+      normalizedFields.description.length > 0
+    ) {
+      normalizedFields.description = this.createAdfFromBody(
+        normalizedFields.description
+      );
+    }
+
     await this.fetchJson(`/rest/api/3/issue/${issueKey}`, {
       method: "PUT",
-      body: JSON.stringify({ fields }),
+      body: JSON.stringify({ fields: normalizedFields }),
     });
   }
 
@@ -501,22 +528,27 @@ export class JiraApiService {
 
   /**
    * Converts plain text to a basic Atlassian Document Format (ADF) structure.
+   * Each line of the input becomes its own paragraph so multi-line
+   * descriptions and comments render with their line breaks preserved.
    */
-  private createAdfFromBody(text: string): AdfDoc {
+  protected createAdfFromBody(text: string): AdfDoc {
+    const lines = text.split("\n").filter((line) => line.trim().length > 0);
+    const paragraphs: AdfNode[] = (lines.length > 0 ? lines : [""]).map(
+      (line) => ({
+        type: "paragraph" as const,
+        content: [
+          {
+            type: "text" as const,
+            text: line,
+          },
+        ],
+      })
+    );
+
     return {
       version: 1,
       type: "doc",
-      content: [
-        {
-          type: "paragraph",
-          content: [
-            {
-              type: "text",
-              text: text,
-            },
-          ],
-        },
-      ],
+      content: paragraphs,
     };
   }
 

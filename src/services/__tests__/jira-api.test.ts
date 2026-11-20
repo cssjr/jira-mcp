@@ -713,4 +713,91 @@ describe("JiraApiService", () => {
       ).rejects.toThrow("JIRA API Error: Invalid request body");
     });
   });
+
+  describe("createIssue", () => {
+    test("should send the description as an ADF document, not a plain string", async () => {
+      let sentBody: any;
+      const mockFetch = async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        sentBody = JSON.parse(init?.body as string);
+        return new Response(
+          JSON.stringify({ id: "1", key: "TEST-100" }),
+          { status: 201 },
+        );
+      };
+      mockFetch.preconnect = async () => {};
+      global.fetch = mockFetch;
+
+      await service.createIssue("TEST", "Bug", "Summary", "Line one\nLine two");
+
+      expect(sentBody.fields.description).toEqual({
+        version: 1,
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Line one" }],
+          },
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Line two" }],
+          },
+        ],
+      });
+    });
+  });
+
+  describe("updateIssue", () => {
+    test("should resolve without throwing on a 204 No Content response", async () => {
+      const mockFetch = async () => new Response(null, { status: 204 });
+      mockFetch.preconnect = async () => {};
+      global.fetch = mockFetch;
+
+      await expect(
+        service.updateIssue("TEST-100", { summary: "New summary" }),
+      ).resolves.toBeUndefined();
+    });
+
+    test("should convert a plain-string description field to ADF", async () => {
+      let sentBody: any;
+      const mockFetch = async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        sentBody = JSON.parse(init?.body as string);
+        return new Response(null, { status: 204 });
+      };
+      mockFetch.preconnect = async () => {};
+      global.fetch = mockFetch;
+
+      await service.updateIssue("TEST-100", {
+        description: "Updated description",
+      });
+
+      expect(sentBody.fields.description).toEqual({
+        version: 1,
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Updated description" }],
+          },
+        ],
+      });
+    });
+  });
+
+  describe("transitionIssue", () => {
+    test("should resolve without throwing on a 204 No Content response", async () => {
+      const mockFetch = async () => new Response(null, { status: 204 });
+      mockFetch.preconnect = async () => {};
+      global.fetch = mockFetch;
+
+      await expect(
+        service.transitionIssue("TEST-100", "31", "Closing"),
+      ).resolves.toBeUndefined();
+    });
+  });
 });
