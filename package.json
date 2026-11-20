@@ -28,5 +28,8 @@
     "bun-types": "^1.2.12",
     "vite": "^7.0.2",
     "vite-plugin-dts": "^4.5.3"
-  }
+  },
+  "files": [
+    "build"
+  ]
 }
