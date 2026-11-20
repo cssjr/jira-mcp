@@ -800,4 +800,65 @@ describe("JiraApiService", () => {
       ).resolves.toBeUndefined();
     });
   });
+
+  describe("createAdfFromBody", () => {
+    test("should render heading lines as ADF headings", () => {
+      const adf = (service as any).createAdfFromBody("## Context\nBody text");
+      expect(adf.content[0]).toEqual({
+        type: "heading",
+        attrs: { level: 2 },
+        content: [{ type: "text", text: "Context" }],
+      });
+      expect(adf.content[1]).toEqual({
+        type: "paragraph",
+        content: [{ type: "text", text: "Body text" }],
+      });
+    });
+
+    test("should group consecutive bullet lines into one bulletList", () => {
+      const adf = (service as any).createAdfFromBody(
+        "- first item\n- second item\n\nparagraph after",
+      );
+      expect(adf.content[0]).toEqual({
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                content: [{ type: "text", text: "first item" }],
+              },
+            ],
+          },
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                content: [{ type: "text", text: "second item" }],
+              },
+            ],
+          },
+        ],
+      });
+      expect(adf.content[1].type).toBe("paragraph");
+      expect(adf.content.length).toBe(2);
+    });
+
+    test("should accept asterisk bullets as well", () => {
+      const adf = (service as any).createAdfFromBody("* starred bullet");
+      expect(adf.content[0].type).toBe("bulletList");
+      expect(adf.content[0].content[0].content[0].content[0].text).toBe(
+        "starred bullet",
+      );
+    });
+
+    test("should return an empty paragraph for empty input", () => {
+      const adf = (service as any).createAdfFromBody("");
+      expect(adf.content).toEqual([
+        { type: "paragraph", content: [{ type: "text", text: "" }] },
+      ]);
+    });
+  });
 });

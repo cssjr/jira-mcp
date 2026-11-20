@@ -53,12 +53,18 @@ export interface AdfDoc {
   content: AdfNode[];
 }
 
-export type AdfNodeType = "paragraph" | "text"; // Add other types as needed
+export type AdfNodeType =
+  | "paragraph"
+  | "text"
+  | "heading"
+  | "bulletList"
+  | "listItem"; // Add other types as needed
 
 export interface AdfNode {
   type: AdfNodeType;
   content?: AdfNode[];
   text?: string;
+  attrs?: Record<string, any>;
 }
 
 // Response structure from JIRA API after adding a comment

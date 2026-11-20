@@ -528,27 +528,72 @@ export class JiraApiService {
 
   /**
    * Converts plain text to a basic Atlassian Document Format (ADF) structure.
-   * Each line of the input becomes its own paragraph so multi-line
-   * descriptions and comments render with their line breaks preserved.
+   * Renders simple markdown-ish structure so multi-line descriptions and
+   * comments keep their shape:
+   *   - lines starting with "#" (or "##", "###") become headings
+   *   - lines starting with "- " or "* " become bulletList items
+   *     (consecutive bullet lines are grouped into one list)
+   *   - every other line becomes its own paragraph
    */
   protected createAdfFromBody(text: string): AdfDoc {
-    const lines = text.split("\n").filter((line) => line.trim().length > 0);
-    const paragraphs: AdfNode[] = (lines.length > 0 ? lines : [""]).map(
-      (line) => ({
-        type: "paragraph" as const,
-        content: [
-          {
-            type: "text" as const,
-            text: line,
-          },
-        ],
-      })
-    );
+    const lines = text.split("\n");
+
+    const content: AdfNode[] = [];
+    let bulletItems: AdfNode[] = [];
+
+    const flushBullets = () => {
+      if (bulletItems.length > 0) {
+        content.push({ type: "bulletList", content: bulletItems });
+        bulletItems = [];
+      }
+    };
+
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.length === 0) {
+        flushBullets();
+        continue;
+      }
+
+      const bulletMatch = line.match(/^[-*]\s+(.*)$/);
+      if (bulletMatch) {
+        bulletItems.push({
+          type: "listItem",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: bulletMatch[1] }],
+            },
+          ],
+        });
+        continue;
+      }
+
+      const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      if (headingMatch) {
+        flushBullets();
+        content.push({
+          type: "heading",
+          attrs: { level: headingMatch[1].length },
+          content: [{ type: "text", text: headingMatch[2] }],
+        });
+        continue;
+      }
+
+      flushBullets();
+      content.push({
+        type: "paragraph",
+        content: [{ type: "text", text: line }],
+      });
+    }
+    flushBullets();
 
     return {
       version: 1,
       type: "doc",
-      content: paragraphs,
+      content: content.length > 0 ? content : [
+        { type: "paragraph", content: [{ type: "text", text: "" }] },
+      ],
     };
   }
 
